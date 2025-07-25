@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retail Audit Assistant</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+   
+
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Retail Audit Assistant</h1>
+            <div class="header-controls">
+                <a href="{{ url_for('new_chat') }}" class="new-chat-btn" title="Start a new conversation">New Chat</a>
+                {# Consolidated button for showing visualization options #}
+                <button id="generate-visualization-button" disabled title="Generate a chart or table from the selected bot message">Generate Visualization</button>
+                {% if user %}
+                <div class="user-info">
+                    Logged in as: <strong>{{ user.name }}</strong> ({{ user.preferred_username or 'N/A' }})
+                    <a href="{{ url_for('logout') }}">Logout</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="flashes-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <ul class="flashes" id="flash-messages">
+                {% for category, message in messages %}
+                <li class="{{ category if category else 'info' }}">
+                    {{ message }}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% endwith %}
+        </div>
+
+        <div id="chat-history">
+            {% if conversation %}
+            {% for msg in conversation %}
+            {% if msg.sender == 'user' %}
+            <div class="message user-message">{{ msg.text|escape }}</div>
+            {% elif msg.sender == 'bot' %}
+            <div class="message bot-message">
+                <input type="radio" name="chart-select" class="chart-select-radio" value="{{ loop.index }}" data-message="{{ msg.text|escape }}">
+                <script>
+                    // This script is inserted per bot message to render Markdown and position the radio button
+                    (function() {
+                        const script = document.currentScript;
+                        const parent = script.parentElement;
+                        const radio = parent.querySelector('.chart-select-radio');
+
+                        if (radio) {
+                            const messageText = radio.dataset.message;
+                            if (messageText) {
+                                // Use marked.parse to render Markdown
+                                const renderedHtml = marked.parse(messageText);
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = renderedHtml;
+
+                                // Add radio button for chart selection first, so markdown content is added after it
+                                const radio = document.createElement('input');
+                                radio.type = 'radio';
+                                radio.name = 'chart-select'; // Keep the same name
+                                radio.classList.add('chart-select-radio');
+                                radio.dataset.message = messageText; // Use the potentially unescaped text
+                                parent.appendChild(radio); // Append radio at the beginning
+
+                                // Append the rendered markdown content next
+                                while(tempDiv.firstChild) {
+                                    parent.insertBefore(tempDiv.firstChild, radio.nextSibling); // Insert after the radio button
+                                }
+                            }
+                             // Add click listener for deselection right after the element is in the DOM
+                            radio.addEventListener('click', function() {
+                                // If the radio was already checked, uncheck it
+                                if (this._just_checked) {
+                                    this.checked = false;
+                                    this._just_checked = false; // Reset flag
+                                } else {
+                                    this._just_checked = true; // Mark as just checked
+                                    // Use a small timeout to allow the default radio check behavior to finish
+                                    setTimeout(() => { this._just_checked = false; }, 10);
+                                }
+                                // Call update button state whether it's checked or unchecked
+                                updateGenerateButtonState();
+                            });
+
+                             // Add change listener for standard radio behavior
+                            radio.addEventListener('change', updateGenerateButtonState);
+
+                            // Initial state update for this radio button if it happens to be checked on load (e.g., from back button)
+                             if (radio.checked) {
+                                updateGenerateButtonState();
+                             }
+                        }
+                        // Remove the script element after execution
+                        script.remove();
+                    })();
+                </script>
+            </div>
+            {% elif msg.sender == 'system' %}
+            <div class="message system-message">{{ msg.text|escape }}</div>
+            {% endif %}
+            {% endfor %}
+            {% else %}
+            <p style="text-align:center;color:#888;" id="empty-chat-placeholder">Conversation history will appear here.</p>
+            {% endif %}
+        </div>
+
+        {% if user %}
+        {# The instructions area remains, hidden by default by CSS, shown when the container class changes #}
+        <div class="chart-instructions-area" id="chart-instructions-area">
+             <label for="chart-instruction-textarea">Enter instructions for the visualization:</label>
+             <textarea id="chart-instruction-textarea" placeholder="e.g., 'Show this as a bar chart' or 'Format this as an Excel table'"></textarea>
+             <div class="chart-instruction-buttons">
+                 <button id="cancel-chart-instruction">Cancel</button>
+                 {# Buttons for triggering the *specific* visualization types after instructions #}
+                 <button id="submit-table-instruction" disabled>Generate Table</button>
+                 <button id="submit-chart-instruction" disabled>Generate Chart</button>
+             </div>
+        </div>
+         {% endif %}
+
+        {# The input area is a sibling, its visibility is controlled by the container class #}
+
+
+        <div class="input-area">
+            {% if user %}
+            <form id="message-form" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <textarea id="message" name="message" placeholder="Type your message here ..." required autocomplete="off" rows="3"></textarea>
+                <button type="submit" id="send-button">Send</button>
+            </form>
+            {% else %}
+            <p style="text-align:center;">Please <a href="{{ url_for('login') }}">log in</a> to use the chat.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="overlay-loader" id="send-loading-overlay">Sending message...</div>
+    <div class="overlay-loader" id="chart-loading-overlay">Generating charts...</div>
+    <div class="overlay-loader" id="table-loading-overlay">Generating table...</div>
+
+    <script>
+        // Get DOM elements
+        const container = document.querySelector('.container'); // Get the main container
+        const chatHistory = document.getElementById('chat-history');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message');
+        const sendButton = document.getElementById('send-button');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const emptyChatPlaceholder = document.getElementById('empty-chat-placeholder');
+
+        // Get the new header button
+        const generateVisualizationButton = document.getElementById('generate-visualization-button');
+
+        // Existing loading overlays
+        const sendLoadingOverlay = document.getElementById('send-loading-overlay');
+        const chartLoadingOverlay = document.getElementById('chart-loading-overlay');
+        const tableLoadingOverlay = document.getElementById('table-loading-overlay');
+
+        // Elements for the instruction area
+        const chartInstructionsArea = document.getElementById('chart-instructions-area');
+        const chartInstructionTextarea = document.getElementById('chart-instruction-textarea');
+        const cancelChartInstructionButton = document.getElementById('cancel-chart-instruction');
+        const submitChartInstructionButton = document.getElementById('submit-chart-instruction');
+        const submitTableInstructionButton = document.getElementById('submit-table-instruction');
+
+
+        // Configure Marked.js for Markdown rendering
+        marked.setOptions({
+            breaks: true, // Render newlines as <br>
+            sanitize: true, // Sanitize the output HTML
+            gfm: true // Use GitHub Flavored Markdown
+        });
+
+        // Function to add a message to the chat history
+        function addMessageToChat(sender, text) {
+            // Remove the placeholder if it exists
+            if (emptyChatPlaceholder) {
+                emptyChatPlaceholder.remove();
+            }
+
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+
+            if (sender === 'user') {
+                messageElement.classList.add('user-message');
+                messageElement.textContent = text; // Use textContent for user messages to avoid XSS
+            } else if (sender === 'bot') {
+                messageElement.classList.add('bot-message');
+                // Use marked.parse to render Markdown for bot messages
+
+                // Create a temporary element to render markdown without adding the radio button yet
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = marked.parse(text);
+
+                // Add radio button for chart selection first, so markdown content is added after it
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'chart-select'; // Keep the same name
+                radio.classList.add('chart-select-radio');
+                radio.dataset.message = text; // Store original message text
+                messageElement.appendChild(radio); // Append radio at the beginning
+
+                // Append the rendered markdown content next
+                while(tempDiv.firstChild) {
+                    messageElement.appendChild(tempDiv.firstChild);
+                }
+
+
+                // Add click listener for deselection
+                radio.addEventListener('click', function() {
+                    if (this._just_checked) {
+                        this.checked = false;
+                        this._just_checked = false; // Reset flag
+                    } else {
+                        this._just_checked = true; // Mark as just checked
+                        // Use a small timeout to allow the default radio check behavior to finish
+                        setTimeout(() => { this._just_checked = false; }, 10);
+                    }
+                    updateGenerateButtonState(); // Update buttons on any radio click
+                });
+
+                // Add change listener for standard radio behavior
+                radio.addEventListener('change', updateGenerateButtonState);
+
+
+            } else { // system message
+                messageElement.classList.add('system-message');
+                messageElement.textContent = text; // Use textContent for system messages
+            }
+
+            chatHistory.appendChild(messageElement);
+            // Scroll to the bottom of the chat history
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // Function to add a flash message
+        function addFlashMessage(category, message) {
+            let flashesContainer = document.getElementById('flash-messages');
+            // If the flashes list doesn't exist, create it
+            if (!flashesContainer) {
+                const flashesOuterContainer = document.createElement('div');
+                flashesOuterContainer.classList.add('flashes-container');
+                flashesContainer = document.createElement('ul');
+                flashesContainer.id = 'flash-messages';
+                flashesContainer.classList.add('flashes');
+                flashesOuterContainer.appendChild(flashesContainer);
+                // Insert the flash container before the chat history
+                 document.querySelector('.container').insertBefore(flashesOuterContainer, chatHistory);
+            }
+
+            const listItem = document.createElement('li');
+            listItem.classList.add(category);
+            listItem.textContent = message;
+            flashesContainer.appendChild(listItem);
+
+            // Automatically fade out and remove the message after 5 seconds
+            setTimeout(() => {
+                listItem.style.opacity = '0';
+                setTimeout(() => listItem.remove(), 500); // Wait for transition to finish
+            }, 5000);
+        }
+
+        // Function to update the state of the Generate buttons
+        // Header button is enabled ONLY if a radio button is checked AND the instruction area is NOT visible
+        // Instruction area buttons are enabled ONLY if the instruction textarea has content AND the instruction area IS visible
+        function updateGenerateButtonState() {
+            const selectedRadio = document.querySelector('input[name="chart-select"]:checked');
+            const instructionAreaVisible = chartInstructionsArea && container.classList.contains('showing-instructions'); // Check container class
+            const instructionTextareaHasContent = chartInstructionTextarea && chartInstructionTextarea.value.trim() !== '';
+
+            // Header button state
+            if (generateVisualizationButton) {
+               generateVisualizationButton.disabled = !selectedRadio || instructionAreaVisible; // Disable if no radio OR instructions are showing
+            }
+
+            // Instruction area buttons state (only relevant if the area is visible, but disabled state is controlled by textarea)
+            if (submitChartInstructionButton) {
+                 submitChartInstructionButton.disabled = !instructionTextareaHasContent;
+            }
+             if (submitTableInstructionButton) {
+                 submitTableInstructionButton.disabled = !instructionTextareaHasContent;
+             }
+        }
+
+        // --- Event Listeners ---
+
+        // Event listener for the message form submission
+        if (messageForm) {
+            messageForm.addEventListener('submit', async (e) => {
+                e.preventDefault(); // Prevent default form submission
+
+                const userMsg = messageInput.value.trim();
+                if (!userMsg) {
+                    return; // Don't send empty messages
+                }
+
+                // Add user message to chat history
+                addMessageToChat('user', userMsg);
+
+                // Clear input and disable elements while sending
+                messageInput.value = '';
+                sendButton.disabled = true;
+                messageInput.disabled = true;
+
+                // Disable header generation button and hide instructions if showing
+                updateGenerateButtonState(); // Disable header button
+                if (container) container.classList.remove('showing-instructions'); // Hide instructions if they were open
+                if (chartInstructionTextarea) chartInstructionTextarea.value = ''; // Clear instructions if sending a new message
+
+
+                sendLoadingOverlay.classList.add('visible'); // Show sending loading overlay
+
+
+                try {
+                    // Send message to the server
+                    const res = await fetch("{{ url_for('send_message') }}", {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken // Include CSRF token
+                        },
+                        body: JSON.stringify({
+                            message: userMsg
+                        })
+                    });
+
+                    const data = await res.json();
+
+                    if (res.ok && data.status === 'success') {
+                        // Add bot response to chat history
+                        addMessageToChat('bot', data.bot_message);
+
+                        // Display any warning message from the bot
+                        if (data.warning) {
+                            addFlashMessage('warning', data.warning);
+                        }
+
+                    } else {
+                        // Handle errors
+                        const errorMessage = data.error_message || `Request failed with status: ${res.status}`;
+                        addMessageToChat('system', `[Error: ${errorMessage}]`);
+                        addFlashMessage('error', `Failed to get bot response: ${errorMessage}`);
+                    }
+
+                } catch (err) {
+                    // Handle network errors
+                    const errorMessage = `Network error: ${err}. Please check your connection.`;
+                    addMessageToChat('system', `[Error: ${errorMessage}]`);
+                    addFlashMessage('error', errorMessage);
+                } finally {
+                    // Re-enable input and hide loader
+                    sendLoadingOverlay.classList.remove('visible');
+                    sendButton.disabled = false;
+                    messageInput.disabled = false;
+                    messageInput.focus(); // Focus the input field
+                    // Ensure scroll to bottom after adding messages
+                    chatHistory.scrollTop = chatHistory.scrollHeight;
+                    // Update generation button state based on current radios (will re-enable header button if radio is checked)
+                    updateGenerateButtonState();
+                }
+            });
+             if (messageInput && sendButton) { // Check if elements exist
+        messageInput.addEventListener('keydown', function(event) {
+            // Check if Enter key is pressed and Shift key is NOT pressed
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevent adding a new line in the textarea
+                sendButton.click();     // Programmatically click the send button
+                                        // Alternatively, you could use messageForm.submit();
+                                        // but clicking the button ensures any of its own click listeners also fire.
+            }
+        });
+    }
+        }
+
+        // Event listener for the new Generate Visualization button (shows the instruction area)
+        if (generateVisualizationButton) {
+            generateVisualizationButton.addEventListener('click', () => {
+                 const selectedRadio = document.querySelector('input[name="chart-select"]:checked');
+                 if (!selectedRadio) {
+                     addFlashMessage('warning', 'Please select a bot message to generate a visualization.');
+                     return;
+                 }
+
+                 // Show the instruction area by adding class to container
+                 if (container) {
+                     container.classList.add('showing-instructions');
+                     // chartInstructionTextarea.value = ''; // *** REMOVED: Do NOT clear textarea here ***
+                     chartInstructionTextarea.focus(); // Focus the textarea
+                     updateGenerateButtonState(); // Update button state (disables header button, enables instruction buttons based on text)
+                 }
+            });
+        }
+
+
+        // Event listener for the Submit Chart button in the instruction area
+        if (submitChartInstructionButton) {
+            submitChartInstructionButton.addEventListener('click', async () => {
+                 const instructions = chartInstructionTextarea.value.trim();
+                 if (!instructions) {
+                     addFlashMessage('warning', 'Please enter instructions for the chart.');
+                     chartInstructionTextarea.focus();
+                     return;
+                 }
+
+                 const selectedRadio = document.querySelector('input[name="chart-select"]:checked');
+                 if (!selectedRadio) {
+                     addFlashMessage('error', 'No bot message selected for charting.');
+                     // Hide instruction area and re-enable main button
+                     if (container) container.classList.remove('showing-instructions');
+                     // chartInstructionTextarea.value = ''; // *** REMOVED: Do NOT clear textarea here ***
+                     updateGenerateButtonState();
+                     return;
+                 }
+
+                 const botMessageText = selectedRadio.dataset.message;
+
+                 // Hide the instruction area immediately
+                 if (container) container.classList.remove('showing-instructions');
+                 // chartInstructionTextarea.value = ''; // *** REMOVED: Do NOT clear textarea here ***
+
+                 chartLoadingOverlay.classList.add('visible'); // Show chart loading overlay
+                 updateGenerateButtonState(); // Update button state (disables header button)
+
+
+                 try {
+                     // Send request to generate charts
+                     const res = await fetch("{{ url_for('generate_charts') }}", {
+                         method: 'POST',
+                         headers: {
+                             'Content-Type': 'application/json',
+                             'X-CSRFToken': csrfToken
+                         },
+                         body: JSON.stringify({
+                             user_instruction: instructions,
+                             user_data: botMessageText // Send the raw bot message text
+                         })
+                     });
+
+                     if (res.ok) {
+                         const html = await res.text();
+                         // Open the chart HTML in a new tab
+                         const chartTab = window.open('', '_blank');
+                         if (chartTab) {
+                             chartTab.document.open();
+                             chartTab.document.write(html);
+                             chartTab.document.close();
+                         } else {
+                             addFlashMessage('warning', 'Please allow pop-ups to view charts.');
+                         }
+                     } else {
+                         // Handle errors from the Flask route (should return JSON errors for non-200)
+                         let errorMessage = `Chart Generation Failed: Request failed with status ${res.status}.`;
+                         try {
+                             const errorData = await res.json();
+                              errorMessage = `Chart Generation Failed: ${errorData.error_message || errorData.status}`;
+                         } catch (parseError) {
+                             // If response wasn't JSON, use the generic message
+                             console.error("Failed to parse chart generation error response as JSON:", parseError);
+                         }
+                         addFlashMessage('error', errorMessage);
+                     }
+
+                 } catch (err) {
+                     addFlashMessage('error', `Network error during chart generation: ${err}`);
+                 } finally {
+                     // Hide loader and update button state
+                     chartLoadingOverlay.classList.remove('visible');
+                     messageInput.focus(); // Focus back on chat input
+                     updateGenerateButtonState(); // Re-evaluate main button state
+                 }
+            });
+        }
+
+        // Event listener for the Submit Table button in the instruction area
+        if (submitTableInstructionButton) {
+            submitTableInstructionButton.addEventListener('click', async () => {
+                 const instructions = chartInstructionTextarea.value.trim();
+                 if (!instructions) {
+                     addFlashMessage('warning', 'Please enter instructions for the table.');
+                     chartInstructionTextarea.focus();
+                     return;
+                 }
+
+                 const selectedRadio = document.querySelector('input[name="chart-select"]:checked');
+                 if (!selectedRadio) {
+                     addFlashMessage('error', 'No bot message selected for table generation.');
+                     // Hide instruction area and re-enable main button
+                     if (container) container.classList.remove('showing-instructions');
+                     // chartInstructionTextarea.value = ''; // *** REMOVED: Do NOT clear textarea here ***
+                     updateGenerateButtonState();
+                     return;
+                 }
+
+                 const botMessageText = selectedRadio.dataset.message;
+
+                 // Hide the instruction area immediately
+                 if (container) container.classList.remove('showing-instructions');
+                 // chartInstructionTextarea.value = ''; // *** REMOVED: Do NOT clear textarea here ***
+
+                 tableLoadingOverlay.classList.add('visible'); // Show table loading overlay
+                 updateGenerateButtonState(); // Update button state (disables header button)
+
+
+                 try {
+                     // Send request to generate HTML table
+                     const res = await fetch("{{ url_for('generate_html_table') }}", {
+                         method: 'POST',
+                         headers: {
+                             'Content-Type': 'application/json',
+                             'X-CSRFToken': csrfToken
+                         },
+                         body: JSON.stringify({
+                             user_instruction: instructions,
+                             user_data: botMessageText // Send the raw bot message text
+                         })
+                     });
+
+                     // Note: The generate_html_table route returns HTML, not JSON on success (200)
+                     // It returns JSON on errors (non-200)
+                     if (res.ok) {
+                         const html = await res.text();
+                         // Open the table HTML in a new tab
+                         const tableTab = window.open('', '_blank');
+                         if (tableTab) {
+                             tableTab.document.open();
+                             tableTab.document.write(html);
+                             tableTab.document.close();
+                         } else {
+                             addFlashMessage('warning', 'Please allow pop-ups to view tables.');
+                         }
+                     } else {
+                          // Handle errors from the Flask route (should return JSON errors for non-200)
+                         let errorMessage = `Table Generation Failed: Request failed with status ${res.status}.`;
+                         try {
+                             const errorData = await res.json();
+                             errorMessage = `Table Generation Failed: ${errorData.error_message || errorData.status}`;
+                         } catch (parseError) {
+                              // If response wasn't JSON, use the generic message
+                              console.error("Failed to parse table generation error response as JSON:", parseError);
+                         }
+                         addFlashMessage('error', errorMessage);
+                     }
+
+                 } catch (err) {
+                     addFlashMessage('error', `Network error during table generation: ${err}`);
+                 } finally {
+                     // Hide loader and update button state
+                     tableLoadingOverlay.classList.remove('visible');
+                     messageInput.focus(); // Focus back on chat input
+                     updateGenerateButtonState(); // Re-evaluate main button state
+                 }
+            });
+        }
+
+
+        // Event listener for the Cancel button in the instruction area
+        if (cancelChartInstructionButton) {
+            cancelChartInstructionButton.addEventListener('click', () => {
+                 if (container) {
+                     container.classList.remove('showing-instructions'); // Hide the area
+                     chartInstructionTextarea.value = ''; // Clear textarea on Cancel
+                     messageInput.focus(); // Focus back on the chat input
+                     updateGenerateButtonState(); // Re-evaluate main button state (should re-enable it if a radio is checked)
+                 }
+            });
+        }
+
+
+        // Add a delegated event listener to the instruction textarea for input changes
+        // to enable/disable the submit buttons within the instruction area
+        if (chartInstructionTextarea) {
+            chartInstructionTextarea.addEventListener('input', updateGenerateButtonState);
+        }
+
+
+        // Code to run when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            // Scroll to the bottom of the chat history initially
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            // Focus the message input if it exists and the instruction area is not visible
+            if (messageInput && !container.classList.contains('showing-instructions')) {
+                messageInput.focus();
+            }
+
+            // Automatically fade out existing flash messages after 5 seconds
+            document.querySelectorAll('#flash-messages li').forEach(flash => {
+                setTimeout(() => {
+                    flash.style.opacity = '0';
+                    setTimeout(() => flash.remove(), 500); // Wait for transition
+                }, 5000);
+            });
+
+            // Initial check to set button state on page load
+            updateGenerateButtonState();
+        });
+
+
+         // Keep the delegated change listener for robust state updates on radio buttons
+         chatHistory.addEventListener('change', (e) => {
+             if (e.target && e.target.classList.contains('chart-select-radio')) {
+                 updateGenerateButtonState(); // Update button state when a radio button is selected/deselected
+             }
+         });
+
+
+    </script>
+</body>
+</html>

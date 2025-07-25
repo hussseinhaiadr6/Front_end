@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ page_title | default('Generated Table') }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    /* CSS adapted from your chart styling theme */
+    body {
+        background-color: white;
+        font-family: sans-serif;
+        padding: 20px;
+        line-height: 1.6; /* Improve readability */
+        color: #333; /* Default text color */
+    }
+    h1 {
+        text-align: center;
+        color: #0056b3;
+        margin-bottom: 30px;
+    }
+    .table-container { /* Changed from .chart-container */
+        margin: 20px auto; /* Center block element and add vertical margin */
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background-color: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        max-width: 1000px; /* Allow wider tables */
+        box-sizing: border-box; /* Include padding and border */
+        overflow-x: auto; /* Add scroll for wide tables */
+    }
+
+    /* Table styling within the container */
+    .table-container table {
+      width: 100%; /* Ensure table takes full container width */
+      border-collapse: collapse;
+      margin-bottom: 0; /* Remove bottom margin as button is below container */
+    }
+    .table-container th,
+    .table-container td {
+      border: 1px solid #ddd;
+      padding: 8px 12px;
+      text-align: left;
+      word-break: break-word; /* Prevent long words from overflowing */
+    }
+    .table-container th {
+      background-color: #f4f4f4;
+      font-weight: bold;
+    }
+    .table-container tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    .table-container tr:hover {
+      background-color: #f1f1f1;
+    }
+    .table-container caption {
+      caption-side: top;
+      font-size: 1.25em;
+      font-weight: bold;
+      padding: 10px 0; /* Adjust padding */
+      text-align: left; /* Align caption left */
+    }
+
+    /* Button container below the table container */
+    .button-container {
+        text-align: center; /* Center buttons */
+        margin-top: 15px;
+    }
+    button {
+        padding: 10px 20px;
+        background-color: #007bff; /* Theme color */
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background-color 0.2s ease; /* Smooth hover effect */
+    }
+    button:hover:not(:disabled) {
+        background-color: #0056b3; /* Darker theme color */
+    }
+     button:disabled {
+      background-color: #aaa; /* Grey out disabled button */
+      cursor: not-allowed;
+    }
+
+    .no-table-message { /* Changed from .no-charts-message */
+        text-align: center;
+        color: #666;
+        font-size: 1.1rem;
+        margin-top: 50px;
+    }
+    .error-message {
+        text-align: center;
+        color: #dc3545; /* Red color for errors */
+        font-size: 1.1rem;
+        margin-top: 50px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>{{ page_title | default('Generated Table') }}</h1>
+
+  {# Display error message if present #}
+  {% if error_message %}
+    <p class="error-message">{{ error_message }}</p>
+  {% elif table_html %}
+    {# Render the table if HTML is provided #}
+    <div id="tableContainer" class="table-container">
+        {# The table HTML will be inserted here by JavaScript #}
+    </div>
+    <div class="button-container">
+      <button id="downloadBtn">📥 Download as .xlsx</button>
+    </div>
+  {% else %}
+    {# Message if no table HTML and no specific error #}
+    <p class="no-table-message">No table could be generated.</p>
+  {% endif %}
+
+
+  <script>
+    // Get the table HTML string passed from Flask
+    // Using | tojson filter to safely embed the string as a JS literal
+    const htmlTableString = {{ table_html | tojson }};
+    const errorMsg = "{{ error_message | escape }}"; // Get error message safely
+
+    const tableContainer = document.getElementById('tableContainer');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    function renderTable(htmlString) {
+      if (!htmlString) return false; // Don't render if string is empty
+
+      // Basic sanity check for table structure (optional but good practice)
+      const trimmed = htmlString.trim();
+      if (!trimmed.toLowerCase().startsWith('<table') || !trimmed.toLowerCase().endsWith('</table>')) {
+        console.warn('Provided HTML string does not look like a table.');
+        // Optionally display a message here if the string is not valid HTML table
+        return false;
+      }
+
+      // Use DOMParser to safely parse the HTML string
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlString, 'text/html');
+      const table = doc.querySelector('table'); // Find the first table element
+
+      if (table) {
+        // Clear container and append the parsed table element
+        tableContainer.innerHTML = '';
+        tableContainer.appendChild(table);
+        return true; // Table was successfully rendered
+      } else {
+        console.error('Could not find a table element in the provided HTML string.');
+        return false; // No table element found
+      }
+    }
+
+    function enableDownload() {
+        if (downloadBtn) { // Check if button exists
+            downloadBtn.disabled = false; // Enable the button
+
+            // Add click listener for download
+            downloadBtn.addEventListener('click', () => {
+                const table = document.querySelector('#tableContainer table');
+                if (table) {
+                    const wb = XLSX.utils.table_to_book(table, { sheet: 'Sheet1' });
+                    XLSX.writeFile(wb, 'exported-table.xlsx');
+                } else {
+                    console.error('Could not find table element for download.');
+                    alert('Could not find table to download.');
+                }
+            });
+        }
+    }
+
+    // --- Initialization ---
+    if (htmlTableString && !errorMsg) { // Only try to render if we have a string and no explicit error
+        if (renderTable(htmlTableString)) {
+             // If table was rendered successfully, enable download
+             enableDownload();
+        } else {
+            // If renderTable failed (e.g., not a table), update message
+            tableContainer.innerHTML = ''; // Clear container
+            const msgDiv = document.createElement('p');
+            msgDiv.className = 'no-table-message'; // Use the appropriate class
+            msgDiv.textContent = 'The generated content was not a valid HTML table.';
+            tableContainer.parentNode.insertBefore(msgDiv, tableContainer.nextSibling); // Insert below container
+             if (downloadBtn) downloadBtn.style.display = 'none'; // Hide button if no table
+        }
+    } else if (!errorMsg) {
+         // Case where no table_html and no error_message are passed (unexpected but handle)
+         const msgDiv = document.createElement('p');
+         msgDiv.className = 'no-table-message';
+         msgDiv.textContent = 'No table data available.';
+         const body = document.body;
+         // Find a good place to insert, maybe after the h1 or at the end
+         if (body.querySelector('h1')) {
+              body.querySelector('h1').after(msgDiv);
+         } else {
+             body.appendChild(msgDiv);
+         }
+         if (downloadBtn) downloadBtn.style.display = 'none'; // Hide button
+         if (tableContainer) tableContainer.style.display = 'none'; // Hide container
+    } else {
+         // Error message was provided, nothing else needs to be done as it's displayed by Jinja
+         if (downloadBtn) downloadBtn.style.display = 'none'; // Hide button
+         if (tableContainer) tableContainer.style.display = 'none'; // Hide container
+    }
+
+     // Ensure button is disabled initially if no table is rendered
+     if (downloadBtn && (!htmlTableString || errorMsg || !document.querySelector('#tableContainer table'))) {
+         downloadBtn.disabled = true;
+     }
+
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title | default('Generated Charts') }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+
+    <style>
+        body {
+            background-color: white;
+            font-family: sans-serif;
+            padding: 20px;
+            line-height: 1.6; /* Improve readability */
+            color: #333; /* Default text color */
+        }
+        h1 {
+            text-align: center;
+            color: #0056b3;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            margin: 20px auto; /* Center block element and add vertical margin */
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            width: 90%;
+            height: 90%; /* Allow height to adjust based on content */
+            max-width: 800px;
+            max-height: 1600px;
+            
+        }
+         canvas {
+ 
+            background-color: #fff;
+
+        }
+        .button-container {
+            text-align: center; /* Center buttons below the chart */
+            margin-top: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s ease; /* Smooth hover effect */
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .no-charts-message {
+            text-align: center;
+            color: #666;
+            font-size: 1.1rem;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>{{ page_title | default('Generated Charts') }}</h1>
+
+    {% if chart_configs and chart_configs | length > 0 %}
+        {% for config in chart_configs %}
+            <div class="chart-container">
+                <canvas id="chart-{{ loop.index }}"></canvas>
+                 <div class="button-container">
+                    <button onclick="downloadChart('chart-{{ loop.index }}', 'chart-{{ loop.index }}.png')">
+                        Download as PNG
+                    </button>
+                 </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p class="no-charts-message">No chart configurations were provided or generated.</p>
+    {% endif %}
+
+
+    <script>
+        // Register ChartDataLabels plugin if needed
+        if (typeof ChartDataLabels !== 'undefined') {
+             Chart.register(ChartDataLabels);
+        } else {
+            console.warn("ChartDataLabels plugin not loaded.");
+        }
+
+
+        // Download chart function (replicated from your previous code)
+        function downloadChart(canvasId, filename) {
+            const orig = document.getElementById(canvasId);
+            if (!orig) {
+                console.error(`Canvas element with ID ${canvasId} not found.`);
+                return;
+            }
+
+            const w = orig.width;
+            const h = orig.height;
+
+            const tmpCanvas = document.createElement('canvas');
+            tmpCanvas.width = w;
+            tmpCanvas.height = h;
+            const tmpCtx = tmpCanvas.getContext('2d');
+
+            tmpCtx.fillStyle = '#ffffff';
+            tmpCtx.fillRect(0, 0, w, h);
+
+            tmpCtx.drawImage(orig, 0, 0);
+
+            tmpCanvas.toBlob(function(blob) {
+                if (blob) {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filename;
+                    link.click();
+                    URL.revokeObjectURL(link.href); // Clean up the object URL
+                } else {
+                    console.error('Failed to generate chart image blob.');
+                }
+            }, 'image/png');
+        }
+
+        // Chart initialization script
+        window.addEventListener('DOMContentLoaded', function() {
+            // Access the chart configs passed from Flask
+            // chartConfigs is a JavaScript array thanks to the | tojson filter
+            const chartConfigs = {{ chart_configs | tojson }};
+
+            if (chartConfigs && Array.isArray(chartConfigs)) {
+                chartConfigs.forEach(function(config, index) {
+                    const canvasId = 'chart-' + (index + 1);
+                    const ctx = document.getElementById(canvasId);
+
+                    if (ctx) {
+                         try {
+                             new Chart(ctx, config);
+                             console.log(`Chart ${index + 1} initialized successfully.`);
+                         } catch (error) {
+                             console.error(`Error initializing chart ${index + 1}:`, error);
+                             // Optionally display an error message on the page for this chart
+                             const container = ctx.parentElement;
+                              if(container) {
+                                 const errorDiv = document.createElement('div');
+                                 errorDiv.style.color = 'red';
+                                 errorDiv.textContent = 'Error rendering chart: ' + error.message;
+                                 container.insertBefore(errorDiv, ctx.nextSibling); // Insert after canvas
+                              }
+                         }
+                    } else {
+                        console.error(`Canvas element with ID ${canvasId} not found.`);
+                    }
+                });
+            } else {
+                 console.warn("No valid chart configurations array received.");
+            }
+        });
+    </script>
+
+</body>
+</html>

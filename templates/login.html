@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Required</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .login-container {
+            background: #ffffff;
+            padding: 40px 50px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        h1 {
+            color: #1a2b4d;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+        p {
+            color: #555;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .login-button {
+            display: inline-block;
+            padding: 12px 25px;
+            background-color: #0078d4;
+            color: white;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .login-button:hover {
+            background-color: #005a9e;
+        }
+        /* Minimal styling for flash messages if needed on this page */
+        .flashes-container { margin-top: 20px; }
+        .flashes { list-style: none; padding: 0; margin: 0; }
+        .flashes li {
+            padding: 10px 15px; margin-bottom: 10px; border-radius: 4px;
+            border: 1px solid transparent; font-size: 0.9em;
+        }
+        .flashes .error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .flashes .warning { background-color: #fff3cd; color: #856404; border-color: #ffeeba; }
+        .flashes .info { background-color: #d1ecf1; color: #0c5460; border-color: #bee5eb; }
+
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Login Required</h1>
+        <p>Please log in using your organizational Microsoft account to access the chat application.</p>
+
+        <div class="flashes-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <ul class="flashes" id="flash-messages">
+                    {% for category, message in messages %}
+                        <li class="{{ category if category else 'info' }}">{{ message }}</li>
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            {% endwith %}
+        </div>
+
+        <form action="{{ url_for('start_login') }}" method="GET">
+            <button type="submit" class="login-button">
+                Login with Microsoft
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // Optional: Auto-remove flash messages after delay
+        document.addEventListener('DOMContentLoaded', () => {
+            const serverFlashes = document.querySelectorAll('#flash-messages li');
+            serverFlashes.forEach(flash => {
+                setTimeout(() => {
+                    flash.style.opacity = '0';
+                    setTimeout(() => flash.remove(), 500); // Remove after fade out
+                }, 5000); // 5 seconds
+            });
+        });
+    </script>
+</body>
+</html>

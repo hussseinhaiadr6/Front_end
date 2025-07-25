@@ -1,0 +1,13 @@
+flask_oauthlib
+python-dotenv
+Flask
+Flask-Session
+msal
+requests
+Flask-WTF
+azure-identity
+azure-keyvault-secrets
+waitress
+json5
+pydantic
+langchain_openai

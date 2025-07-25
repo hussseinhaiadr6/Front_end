@@ -1,0 +1,528 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f0f2f5;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Main container for the chat interface */
+.container {
+    max-width: 800px;
+    width: 100%;
+    margin: 10px auto;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .1);
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    overflow: hidden;
+    position: relative; /* Needed for positioning the instructions area */
+}
+
+/* Header section */
+.header {
+    padding: 15px 25px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    /* Styles to make the header fixed */
+    position: fixed; /* Fix the position relative to the viewport */
+    top: 10px; /* Position from the top, aligning with the container's top margin */
+    left: 0; /* Anchor to the left edge of the viewport */
+    right: 0; /* Anchor to the right edge of the viewport */
+    margin-left: auto; /* Auto margins along with left/right: 0 centers the block */
+    margin-right: auto;
+    max-width: 800px; /* Constrain width to match the container */
+    width: 100%; /* Ensure it takes full width up to max-width */
+    background: #fff; /* Add a background color so content doesn't show through */
+    z-index: 100; /* Ensure it stays on top of other content */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    border-top-left-radius: 8px; /* Match container's top radius */
+    border-top-right-radius: 8px; /* Match container's top radius */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .08); /* Optional: Add a subtle shadow */
+}
+
+/* Title styling */
+h1 {
+    margin: 0;
+    font-size: 1.5em;
+    color: #1a2b4d;
+}
+
+/* Container for header controls */
+.header-controls {
+    display: flex;
+    align-items: center;
+}
+
+/* User information styling */
+.user-info {
+    font-size: .9em;
+    color: #555;
+    margin-left: 20px;
+    text-align: right;
+}
+
+.user-info strong {
+    color: #000;
+}
+
+.user-info a {
+    color: #0078d4;
+    text-decoration: none;
+    margin-left: 15px;
+    font-weight: 500;
+}
+
+.user-info a:hover {
+    text-decoration: underline;
+}
+
+/* New chat button styling */
+.new-chat-btn {
+    background: #6c757d;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: .85em;
+    cursor: pointer;
+    transition: background .2s;
+    margin-left: 15px;
+    text-decoration: none;
+}
+
+.new-chat-btn:hover {
+    background: #5a6268;
+}
+
+/* New Generate Visualization button styling */
+#generate-visualization-button {
+     background: #0078d4; /* Blue color */
+     color: #fff;
+     border: none;
+     padding: 6px 12px;
+     border-radius: 4px;
+     font-size: .85em;
+     cursor: pointer;
+     transition: background .2s;
+     margin-left: 10px; /* Adds space between New Chat and this button */
+}
+
+#generate-visualization-button:hover:not(:disabled) {
+    background: #005a9e; /* Darker blue on hover */
+}
+
+#generate-visualization-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+
+/* Container for flash messages */
+.flashes-container {
+    padding: 0 25px;
+    z-index: 1; /* Ensure flashes are above chat history */
+    /* Margin top to account for the fixed header height and its top margin */
+    margin-top: 95px; /* This pushes the flash messages down below the fixed header */
+    position: relative; /* Needed for z-index to work correctly in some stacking contexts */
+}
+
+.flashes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.flashes li {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-size: .9em;
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+}
+
+/* Flash message types */
+.success {
+    background: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.error {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.warning {
+    background: #fff3cd;
+    color: #856404;
+    border-color: #ffeeba;
+}
+
+.info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border-color: #bee5eb;
+}
+
+/* Chat history area */
+#chat-history {
+    flex-grow: 1;
+    overflow-y: auto;
+    /* Adjust padding: Keep left/right, increase bottom */
+    /* Updated padding bottom to make space for the instruction area which can be taller */
+    padding: 20px 25px 180px 25px; /* Increased bottom padding */
+    display: flex;
+    flex-direction: column;
+    z-index: 0; /* Chat history should be below flashes and fixed bottom areas */
+
+    /* Remove or reduce margin-top as flashes-container now provides the necessary spacing */
+    margin-top: 0;
+}
+
+/* Individual message styling */
+.message {
+    margin-bottom: 15px;
+    padding: 10px 15px;
+    border-radius: 18px;
+    max-width: 85%;
+    word-wrap: break-word;
+    line-height: 1.4;
+    position: relative; /* For radio button positioning */
+}
+
+/* User message styling */
+.user-message {
+    background: #0078d4;
+    color: #fff;
+    margin-left: auto;
+    border-bottom-right-radius: 5px;
+}
+
+/* Bot message styling */
+.bot-message {
+    background: #e9e9eb;
+    color: #333;
+    margin-right: auto;
+    border-bottom-left-radius: 5px;
+    padding-right: 30px; /* Space for radio button */
+}
+
+/* Radio button for chart selection */
+.chart-select-radio {
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Style for the checked radio */
+.chart-select-radio:checked {
+    /* outline: 2px solid #0078d4; */
+}
+
+/* System message styling */
+.system-message {
+    background: #fcf8e3;
+    color: #8a6d3b;
+    border: 1px dashed #faebcc;
+    font-style: italic;
+    font-size: .9em;
+    margin-right: auto; /* Align left */
+    border-radius: 5px;
+    max-width: 100%;
+}
+
+/* Styling for content within bot messages */
+.bot-message p {
+    margin: 0 0 .5em 0;
+}
+
+.bot-message p:last-child {
+    margin-bottom: 0;
+}
+
+.bot-message ul,
+.bot-message ol {
+    padding-left: 25px;
+    margin: .5em 0;
+}
+
+.bot-message li {
+    margin-bottom: .35em;
+}
+
+.bot-message pre {
+    background: #f5f5f5;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    word-break: break-all; /* Ensure long lines wrap */
+    white-space: pre-wrap; /* Handle wrapping within code blocks */
+}
+
+.bot-message code {
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: .9em;
+}
+
+/* Input area styling */
+.input-area {
+    padding: 15px 25px;
+    background: #f8f9fa;
+    z-index: 2; /* Ensure it's above chat history */
+
+    /* Added/Modified for fixed and centered positioning */
+    position: fixed;
+    bottom: 0;
+    left: 0; /* Anchor to left edge of viewport */
+    right: 0; /* Anchor to right edge of viewport */
+    margin-left: auto; /* Center the block */
+    margin-right: auto; /* Center the block */
+
+    max-width: 800px; /* Max width matches the container */
+    width: 100%; /* Takes up 100% of parent width up to max-width */
+    box-sizing: border-box; /* Include padding in the width */
+    /* Remove any default margin that might interfere */
+    margin-top: 0;
+    margin-bottom: 0;
+    display: block; /* Default state is visible */
+}
+
+/* Hide input area when instructions are visible */
+.container.showing-instructions .input-area {
+    display: none;
+}
+
+
+/* Message form styling */
+#message-form {
+    display: flex;
+    align-items: flex-end;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, .05);
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 0;
+    position: relative;
+}
+#message {
+    flex-grow: 1;
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    border-right: none;
+    border-radius: 5px 0 0 5px;
+    font-size: 1rem;
+    outline: none;
+    resize: none; /* Prevent manual resizing */
+    overflow-y: auto;
+    line-height: 1.4;
+    font-family: inherit;
+    /* MODIFIED: Increase min-height, e.g., for approx 3 lines + padding */
+    /* Or set a fixed pixel value like min-height: 70px; */
+    min-height: calc((1rem * 1.4 * 3) + 20px); /* Approx 3 lines of text + padding */
+    box-sizing: border-box;
+    width: 100%;
+}
+
+#message:focus {
+    border-color: #0078d4;
+    box-shadow: 0 0 0 2px rgba(0, 120, 212, .2);
+}
+
+#send-button {
+    padding: 12px 20px; /* Keep padding or adjust as needed */
+    background: #0078d4;
+    color: #fff;
+    border: none;
+    border-radius: 0 5px 5px 0;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: background .2s;
+    align-self: stretch; /* This is important to make the button height match the textarea */
+    /* ADDED/MODIFIED: Ensure the button's height is consistent with the textarea's initial and grown height */
+    /* We can set a min-height for the button that matches the textarea's initial min-height if needed,
+       but align-self: stretch in a flex container should handle it.
+       Let's ensure its padding and font-size make it look appropriate for the new textarea height.
+       The current padding: 12px 20px; and align-self: stretch; should work well.
+    */
+}
+
+#send-button:hover:not(:disabled) {
+    background: #005a9e;
+}
+
+#send-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+/* Overlay loader styling */
+.overlay-loader {
+    display: none; /* Hidden by default */
+    position: fixed; /* Use fixed to cover the whole viewport */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, .85);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2em;
+    color: #333;
+}
+
+.overlay-loader.visible {
+    display: flex; /* Show when visible class is added */
+    pointer-events: auto; /* Block clicks when visible */
+}
+
+/* Style for the chart instruction area (now general visualization instruction) */
+.chart-instructions-area {
+    display: none; /* Hidden by default */
+    position: fixed; /* Position relative to the viewport */
+
+    bottom: 0; /* Anchor to the bottom */
+    left: 0; /* Anchor to left edge of viewport */
+    right: 0; /* Anchor to right edge of viewport */
+    margin-left: auto; /* Center the block */
+    margin-right: auto; /* Center the block */
+
+    max-width: 800px; /* Max width matches the container */
+    width: 100%; /* Explicitly set width up to max-width */
+    box-sizing: border-box; /* Include padding in width */
+
+    background: #f8f9fa; /* Match input area background */
+    padding: 15px 25px;
+    border-top: 1px solid #eee;
+    z-index: 500; /* Ensure it's above input area and chat history */
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, .05);
+    flex-direction: column; /* Arrange elements vertically */
+    /* Remove any default margin that might interfere */
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Show instruction area when container has the class */
+.container.showing-instructions .chart-instructions-area {
+    display: flex;
+}
+
+
+.chart-instructions-area label {
+    font-size: .9em;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+#chart-instruction-textarea {
+    width: 100%; /* Ensure it takes full width within flex container */
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    border-radius: 5px; /* Corrected typo from 5ish px */
+    font-size: 1rem;
+    outline: none;
+    resize: vertical; /* Allow vertical resize */
+    overflow-y: auto;
+    line-height: 1.4;
+    font-family: inherit;
+    min-height: 80px; /* Minimum height */
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+#chart-instruction-textarea:focus {
+      border-color: #0078d4;
+    box-shadow: 0 0 0 2px rgba(0, 120, 212, .2);
+}
+
+.chart-instruction-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px; /* Space between buttons */
+}
+
+.chart-instruction-buttons button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .9rem;
+    transition: background .2s;
+}
+
+#submit-chart-instruction {
+    background: #0078d4; /* Blue for Chart */
+    color: #fff;
+}
+
+#submit-chart-instruction:hover:not(:disabled) {
+    background: #005a9e;
+}
+
+ #submit-chart-instruction:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+#cancel-chart-instruction {
+    background: #6c757d;
+    color: #fff;
+}
+
+#cancel-chart-instruction:hover {
+    background: #5a6268;
+}
+
+/* Style for the new submit button in the instruction area */
+#submit-table-instruction {
+    background: #17a2b8; /* Cyan/Teal for Table */
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .9rem;
+    transition: background .2s;
+    padding: 8px 15px; /* Match other instruction button padding */
+}
+
+#submit-table-instruction:hover:not(:disabled) {
+    background: #138496;
+}
+
+#submit-table-instruction:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+
+/* Style for the new table loading overlay */
+#table-loading-overlay {
+    /* Inherits basic .overlay-loader styles */
+}
+#chart-loading-overlay {
+    /* Inherits basic .overlay-loader styles */
+}
+#send-loading-overlay {
+    /* Inherits basic .overlay-loader styles */
+}
+
+
+/* Ensure header controls have appropriate gap */
+.header-controls > *:not(:first-child) {
+     margin-left: 10px; /* Adds space between direct children in header controls */
+}
+
